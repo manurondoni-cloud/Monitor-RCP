@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor RCP Avanzado</title>
+    
+    <!-- ** MEJORAS PWA (Progressive Web App) ** -->
+    <meta name="theme-color" content="#03a9f4"/>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Monitor RCP">
+    <link rel="apple-touch-icon" href="https://placehold.co/192x192/03a9f4/FFFFFF?text=RCP&font=segoeui">
+    
+    <!-- El "manifest" describe cómo se verá y comportará la app. Se incluye directamente para mantener todo en un solo archivo. -->
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIk1vbml0b3IgUkNQIEF2YW56YWRvIiwKICAic2hvcnRfbmFtZSI6ICJNb25pdG9yIFJDUCIsCiAgInN0YXJ0X3VybCI6ICIuIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjMTIxMjEyIiwKICAidGhlbWVfY29sb3IiOiAiIzAzYTlmNCIsCiAgImRlc2NyaXB0aW9uIjogIkFwbGljYWNpw7NuIHBhcmEgbW9uaXRvcmVhciB5IGV2YWx1YXIgbGEgY2FsaWRhZCBkZSBsYXMgY29tcHJlc2lvbmVzIGRlIFJDUC4iLAogICJpY29ucyI6IFsKICAgIHsKICAgICAgInNyYyI6ICJodHRwczovL3BsYWNlaG9sZC5jby8xOTJ4MTkyLzAzYTlmNC9GRkZGRkY/dGV4dD1SQ1AmZm9udD1zZWdvZXVpIiwKICAgICAgInNpemVzIjogIjE5MngxOTIiLAogICAgICAidHlwZSI6ICJpbWFnZS9wbmciCiAgICB9LAogICAgewogICAgICAic3JjIjogImh0dHBzOi8vcGxhY2Vob2xkLmNvLzUxMng1MTIvMDNhOWY0L0ZGRkZGRj90ZXh0PVJDUCZmb250PXNlZ29ldWkiLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIsCiAgICAgICJ0eXBlIjogImltYWdlL3BuZyIKICAgIH0KICBdCn0K">
+
+    <style>
+        :root {
+            --bg-color: #121212;
+            --primary-color: #1e1e1e;
+            --secondary-color: #2c2c2c;
+            --text-color: #e0e0e0;
+            --accent-color: #03a9f4;
+            --accent-hover: #039be5;
+            --good-color: #4caf50;
+            --warn-color: #ffc107;
+            --bad-color: #f44336;
+            --font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: 900px;
+            text-align: center;
+        }
+
+        header {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--secondary-color);
+        }
+
+        #connect-button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1.1em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin: 10px 0;
+        }
+
+        #connect-button:hover {
+            background-color: var(--accent-hover);
+        }
+        #connect-button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        #status { font-style: italic; color: #aaa; min-height: 1.5em; }
+
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .nav-button {
+            padding: 10px 20px;
+            background: var(--secondary-color);
+            border: 1px solid #444;
+            color: var(--text-color);
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .nav-button.active {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+        .nav-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .mode-content { display: none; }
+        .mode-content.active { display: block; }
+
+        /* --- Visualizaciones --- */
+        .visuals-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+            margin: 25px 0;
+        }
+
+        @media (min-width: 768px) {
+            .visuals-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        .viz-container {
+            background: var(--primary-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Barra de Profundidad */
+        .depth-container {
+            width: 100px;
+            height: 250px;
+            background: var(--secondary-color);
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+            border: 2px solid #444;
+        }
+        #depth-bar-ideal {
+            position: absolute;
+            bottom: 40%; 
+            left: 0;
+            width: 100%;
+            height: 25%;
+            background: rgba(76, 175, 80, 0.3);
+        }
+        #depth-bar-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0;
+            background: linear-gradient(to top, var(--accent-color), #03c1ff);
+            transition: height 0.2s ease-out, background-color 0.3s;
+        }
+
+        /* Medidor de Ritmo */
+        .rate-gauge-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .rate-gauge {
+            width: 250px;
+            height: 125px;
+            position: relative;
+            overflow: hidden;
+        }
+        .rate-gauge-bg {
+            width: 100%;
+            height: 100%;
+            background: conic-gradient(
+                from -90deg,
+                var(--bad-color) 0 35deg,
+                var(--warn-color) 35deg 70deg,
+                var(--good-color) 70deg 110deg,
+                var(--warn-color) 110deg 145deg,
+                var(--bad-color) 145deg 180deg
+            );
+            border-radius: 250px 250px 0 0;
+        }
+        .rate-gauge-cover {
+            width: 200px;
+            height: 100px;
+            background: var(--primary-color);
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 200px 200px 0 0;
+        }
+        #rate-needle {
+            width: 2px;
+            height: 110px;
+            background: var(--text-color);
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform-origin: bottom center;
+            transform: translateX(-50%) rotate(0deg);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #rate-value { font-size: 2em; font-weight: bold; margin-top: 10px; }
+
+        /* Tarjetas de Feedback */
+        .feedback-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .feedback-card {
+            background: var(--secondary-color);
+            border-radius: 10px;
+            padding: 20px;
+            border-bottom: 4px solid #555;
+            transition: border-color 0.3s;
+        }
+        .feedback-card h3 { margin-top: 0; color: #ccc; }
+        .feedback-card p { font-size: 1.5em; font-weight: bold; margin: 0; min-height: 1.2em; }
+        .good { border-color: var(--good-color); }
+        .bad { border-color: var(--bad-color); }
+
+        /* Modo Datos de Compresión */
+        #compression-log-container {
+            background: var(--primary-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            text-align: left;
+        }
+        .log-entry {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1.1em;
+            padding: 5px;
+            border-bottom: 1px solid var(--secondary-color);
+        }
+        .log-entry:first-child {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+
+        /* Modo Evaluación */
+        #evaluation-controls { margin: 20px 0; }
+        #start-eval-button {
+            padding: 15px 40px; font-size: 1.2em;
+            background: var(--good-color); color: white; border: none;
+            border-radius: 8px; cursor: pointer; transition: background-color 0.3s;
+        }
+        #start-eval-button:disabled { background: #555; cursor: not-allowed; }
+        #timer-display { font-size: 3em; font-weight: bold; margin: 20px 0; color: var(--accent-color); }
+
+        /* Modal de Resultados */
+        #results-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none;
+            justify-content: center; align-items: center;
+            z-index: 100;
+        }
+        #results-content {
+            background: var(--primary-color); padding: 30px;
+            border-radius: 15px; text-align: center;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.5);
+            width: 90%; max-width: 500px;
+        }
+        #final-score { font-size: 5em; font-weight: bold; color: var(--accent-color); margin: 10px 0; }
+        #results-summary p { font-size: 1.2em; }
+        #close-modal-button {
+            margin-top: 20px; padding: 10px 30px; font-size: 1em;
+            background: var(--accent-color); color: white; border: none;
+            border-radius: 8px; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <header>
+            <h1>Monitor RCP Avanzado</h1>
+            <button id="connect-button">Conectar al Sensor</button>
+            <p id="status">Desconectado. Haz clic para buscar dispositivos.</p>
+        </header>
+
+        <nav id="mode-nav" style="display: none;">
+            <button class="nav-button active" data-mode="free">Práctica Libre</button>
+            <button class="nav-button" data-mode="evaluation">Evaluación</button>
+            <button class="nav-button" data-mode="raw">Datos de Compresión</button>
+        </nav>
+
+        <main>
+            <div id="shared-ui-container" style="display: block;">
+                <div class="visuals-grid">
+                    <div class="viz-container">
+                        <h2>Profundidad</h2>
+                        <div class="depth-container">
+                            <div id="depth-bar-ideal"></div>
+                            <div id="depth-bar-fill"></div>
+                        </div>
+                    </div>
+                    <div class="viz-container rate-gauge-container">
+                        <h2>Ritmo (CPM)</h2>
+                        <div class="rate-gauge">
+                            <div class="rate-gauge-bg"></div>
+                            <div class="rate-gauge-cover"></div>
+                            <div id="rate-needle"></div>
+                        </div>
+                         <p id="rate-value">0</p>
+                    </div>
+                </div>
+                <div class="feedback-grid">
+                    <div class="feedback-card" id="depth-card"><h3>Profundidad</h3><p>-</p></div>
+                    <div class="feedback-card" id="recoil-card"><h3>Descompresión</h3><p>-</p></div>
+                    <div class="feedback-card" id="position-card"><h3>Posición</h3><p>-</p></div>
+                </div>
+            </div>
+
+            <div id="mode-free" class="mode-content active"></div>
+            <div id="mode-evaluation" class="mode-content">
+                 <div id="evaluation-controls">
+                    <p>Presiona Iniciar para una evaluación de 2 minutos.</p>
+                    <button id="start-eval-button">Iniciar Evaluación</button>
+                </div>
+                <div id="timer-display" style="display: none;">2:00</div>
+            </div>
+
+            <div id="mode-raw" class="mode-content">
+                <h2>Registro de Datos de Compresión</h2>
+                <div id="compression-log-container">
+                    <div class="log-entry" style="font-weight: bold;"># | Profundidad (valor crudo) | Descompresión (valor crudo)</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="results-modal">
+        <div id="results-content">
+            <h2>¡Evaluación Completada!</h2>
+            <p>Puntaje Final:</p>
+            <p id="final-score">0</p>
+            <div id="results-summary"></div>
+            <button id="close-modal-button">Intentar de Nuevo</button>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const connectButton = document.getElementById('connect-button');
+        const statusDisplay = document.getElementById('status');
+        const modeNav = document.getElementById('mode-nav');
+        const navButtons = document.querySelectorAll('.nav-button');
+        const modeContents = document.querySelectorAll('.mode-content');
+        const sharedUiContainer = document.getElementById('shared-ui-container');
+        const depthFill = document.getElementById('depth-bar-fill');
+        const rateNeedle = document.getElementById('rate-needle');
+        const rateValueText = document.getElementById('rate-value');
+        const depthCard = document.getElementById('depth-card');
+        const depthFeedbackText = depthCard.querySelector('p');
+        const recoilCard = document.getElementById('recoil-card');
+        const recoilFeedbackText = recoilCard.querySelector('p');
+        const positionCard = document.getElementById('position-card');
+        const positionFeedbackText = positionCard.querySelector('p');
+        const compressionLogContainer = document.getElementById('compression-log-container');
+        const startEvalButton = document.getElementById('start-eval-button');
+        const timerDisplay = document.getElementById('timer-display');
+        const evaluationControls = document.getElementById('evaluation-controls');
+        const resultsModal = document.getElementById('results-modal');
+        const finalScoreText = document.getElementById('final-score');
+        const resultsSummary = document.getElementById('results-summary');
+        const closeModalButton = document.getElementById('close-modal-button');
+
+        // BLE UUIDs
+        const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+        const FEEDBACK_CHARACTERISTIC_UUID = "beb5483e-36c1-4688-b7f5-ea07361b26a8";
+        const RAW_DATA_CHARACTERISTIC_UUID = "c23b79e7-139b-435c-83b6-d41e92b8268b";
+
+        let bleDevice, isEvaluationRunning = false, evaluationTimer, evalStats = {}, compressionLogCounter = 0;
+
+        connectButton.addEventListener('click', async () => {
+            if (bleDevice && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+            else await connectToDevice();
+        });
+
+        async function connectToDevice() {
+            try {
+                statusDisplay.textContent = 'Buscando dispositivos...';
+                bleDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }] });
+                bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+                statusDisplay.textContent = 'Conectando...';
+                const server = await bleDevice.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                const feedbackChar = await service.getCharacteristic(FEEDBACK_CHARACTERISTIC_UUID);
+                await feedbackChar.startNotifications();
+                feedbackChar.addEventListener('characteristicvaluechanged', handleFeedback);
+                const rawDataChar = await service.getCharacteristic(RAW_DATA_CHARACTERISTIC_UUID);
+                await rawDataChar.startNotifications();
+                rawDataChar.addEventListener('characteristicvaluechanged', handleCompressionData);
+                statusDisplay.textContent = '¡Conectado!';
+                connectButton.textContent = 'Desconectar';
+                modeNav.style.display = 'flex';
+            } catch (error) {
+                console.error('Error de Conexión:', error);
+                statusDisplay.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function onDisconnected() {
+            statusDisplay.textContent = 'Dispositivo desconectado.';
+            connectButton.textContent = 'Conectar al Sensor';
+            modeNav.style.display = 'none';
+            if (isEvaluationRunning) endEvaluation(true);
+        }
+
+        function handleFeedback(event) {
+            const value = new TextDecoder().decode(event.target.value);
+            const [peakAccel, recoilAccel, rate, isStraight] = value.split(',').map(Number);
+            updateFeedbackUI(peakAccel, recoilAccel, rate, isStraight);
+            if (isEvaluationRunning) updateEvaluationStats(peakAccel, recoilAccel, rate, isStraight);
+        }
+
+        function handleCompressionData(event) {
+            const value = new TextDecoder().decode(event.target.value);
+            const [peak, recoil] = value.split(',');
+            compressionLogCounter++;
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            const countStr = compressionLogCounter.toString().padStart(3, ' ');
+            const peakStr = peak.toString().padStart(6, ' ');
+            const recoilStr = recoil.toString().padStart(6, ' ');
+            logEntry.textContent = `${countStr} | Prof: ${peakStr} | Descomp: ${recoilStr}`;
+            compressionLogContainer.insertBefore(logEntry, compressionLogContainer.children[1]);
+            if (compressionLogContainer.children.length > 101) compressionLogContainer.removeChild(compressionLogContainer.lastChild);
+        }
+
+        function updateFeedbackUI(peakAccel, recoilAccel, rate, isStraight) {
+            const depthValue = Math.abs(peakAccel);
+            depthFill.style.height = `${Math.min(100, (depthValue / 18000) * 100)}%`;
+            const rateValue = rate > 0 ? rate : 0;
+            rateValueText.textContent = rateValue;
+            const rateAngle = (rateValue / 240) * 180 - 90;
+            rateNeedle.style.transform = `translateX(-50%) rotate(${Math.max(-90, Math.min(90, rateAngle))}deg)`;
+
+            if (depthValue > 13500) {
+                updateCard(depthCard, depthFeedbackText, 'Muy Profundo', 'bad');
+                depthFill.style.backgroundColor = 'var(--bad-color)';
+            } else if (depthValue < 9500) {
+                updateCard(depthCard, depthFeedbackText, 'Insuficiente', 'bad');
+                depthFill.style.backgroundColor = 'var(--bad-color)';
+            } else {
+                updateCard(depthCard, depthFeedbackText, 'Correcto', 'good');
+                depthFill.style.backgroundColor = 'var(--good-color)';
+            }
+            updateCard(recoilCard, recoilFeedbackText, recoilAccel < 5000 ? 'Incompleta' : 'Completa', recoilAccel < 5000 ? 'bad' : 'good');
+            updateCard(positionCard, positionFeedbackText, isStraight === 1 ? 'Correcta' : 'Incorrecta', isStraight === 1 ? 'good' : 'bad');
+        }
+
+        function updateCard(card, text, val, state) { text.textContent = val; card.className = `feedback-card ${state}`; }
+
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                if (isEvaluationRunning) return;
+                const targetMode = button.dataset.mode;
+                navButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                modeContents.forEach(content => content.classList.remove('active'));
+                document.getElementById(`mode-${targetMode}`).classList.add('active');
+                sharedUiContainer.style.display = (targetMode === 'free' || targetMode === 'evaluation') ? 'block' : 'none';
+            });
+        });
+
+        startEvalButton.addEventListener('click', startEvaluation);
+
+        function startEvaluation() {
+            isEvaluationRunning = true;
+            [startEvalButton, connectButton, ...navButtons].forEach(b => b.disabled = true);
+            evaluationControls.style.display = 'none';
+            timerDisplay.style.display = 'block';
+            sharedUiContainer.style.display = 'block';
+            evalStats = { totalCompressions: 0, goodDepth: 0, goodRate: 0, goodRecoil: 0, goodPosition: 0 };
+            let timeLeft = 120;
+            timerDisplay.textContent = '2:00';
+            evaluationTimer = setInterval(() => {
+                timeLeft--;
+                timerDisplay.textContent = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
+                if (timeLeft <= 0) endEvaluation(false);
+            }, 1000);
+        }
+
+        function updateEvaluationStats(peak, recoil, rate, straight) {
+            evalStats.totalCompressions++;
+            const depth = Math.abs(peak);
+            if (depth >= 9500 && depth <= 13500) evalStats.goodDepth++;
+            if (rate >= 100 && rate <= 120) evalStats.goodRate++;
+            if (recoil >= 5000) evalStats.goodRecoil++;
+            if (straight === 1) evalStats.goodPosition++;
+        }
+
+        function endEvaluation(cancelled) {
+            clearInterval(evaluationTimer);
+            isEvaluationRunning = false;
+            [startEvalButton, connectButton, ...navButtons].forEach(b => b.disabled = false);
+            evaluationControls.style.display = 'block';
+            timerDisplay.style.display = 'none';
+            if (cancelled) return;
+            const { totalCompressions, goodDepth, goodRate, goodRecoil, goodPosition } = evalStats;
+            let score = 0;
+            let summary = '';
+            if (totalCompressions > 0) {
+                const depthPct = goodDepth / totalCompressions, ratePct = goodRate / totalCompressions, recoilPct = goodRecoil / totalCompressions;
+                score = Math.round((depthPct * 40) + (ratePct * 35) + (recoilPct * 15) + ((goodPosition / totalCompressions) * 10));
+                summary = `<p>Compresiones Totales: <strong>${totalCompressions}</strong></p><p>Profundidad Correcta: <strong>${Math.round(depthPct * 100)}%</strong></p><p>Ritmo Correcto: <strong>${Math.round(ratePct * 100)}%</strong></p><p>Descompresión Completa: <strong>${Math.round(recoilPct * 100)}%</strong></p>`;
+            } else {
+                summary = `<p>No se detectaron compresiones.</p>`;
+            }
+            finalScoreText.textContent = score;
+            resultsSummary.innerHTML = summary;
+            resultsModal.style.display = 'flex';
+        }
+        closeModalButton.addEventListener('click', () => { resultsModal.style.display = 'none'; });
+    </script>
+</body>
+</html>
+
