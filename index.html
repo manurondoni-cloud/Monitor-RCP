@@ -140,7 +140,7 @@
                     </div>
                     <button id="start-eval-button" class="button">Iniciar Evaluación</button>
                 </div>
-                <div id="timer-display" style="display: none;">0:00</div>
+                <div id="timer-display" style="display: none; font-size: 2em; margin: 20px;">0:00</div>
             </div>
             
             <div id="mode-raw" class="mode-content">
@@ -151,30 +151,40 @@
             </div>
 
             <div id="mode-settings" class="mode-content">
-                <div class="settings-group">
-                    <h3>Profundidad (Valores de Aceleración)</h3>
-                    <div class="setting-item">
-                        <label for="depth-min-slider">Mínimo Correcto:</label>
-                        <input type="range" id="depth-min-slider" min="5000" max="12000" step="100">
-                        <span id="depth-min-value">0</span>
+                <div id="settings-container">
+                    <div class="settings-group">
+                        <h3>Profundidad (Valores de Aceleración)</h3>
+                        <div class="setting-item">
+                            <label for="depth-min-slider">Mínimo Correcto:</label>
+                            <input type="range" id="depth-min-slider" min="5000" max="12000" step="100">
+                            <span id="depth-min-value">0</span>
+                        </div>
+                        <div class="setting-item">
+                            <label for="depth-max-slider">Máximo Correcto:</label>
+                            <input type="range" id="depth-max-slider" min="12000" max="20000" step="100">
+                            <span id="depth-max-value">0</span>
+                        </div>
                     </div>
-                    <div class="setting-item">
-                        <label for="depth-max-slider">Máximo Correcto:</label>
-                        <input type="range" id="depth-max-slider" min="12000" max="20000" step="100">
-                        <span id="depth-max-value">0</span>
+                    <div class="settings-group">
+                        <h3>Ritmo (Compresiones por Minuto)</h3>
+                        <div class="setting-item">
+                            <label for="rate-min-slider">Mínimo Correcto:</label>
+                            <input type="range" id="rate-min-slider" min="80" max="110" step="1">
+                            <span id="rate-min-value">0</span>
+                        </div>
+                         <div class="setting-item">
+                            <label for="rate-max-slider">Máximo Correcto:</label>
+                            <input type="range" id="rate-max-slider" min="110" max="140" step="1">
+                            <span id="rate-max-value">0</span>
+                        </div>
                     </div>
-                </div>
-                <div class="settings-group">
-                    <h3>Ritmo (Compresiones por Minuto)</h3>
-                    <div class="setting-item">
-                        <label for="rate-min-slider">Mínimo Correcto:</label>
-                        <input type="range" id="rate-min-slider" min="80" max="110" step="1">
-                        <span id="rate-min-value">0</span>
-                    </div>
-                     <div class="setting-item">
-                        <label for="rate-max-slider">Máximo Correcto:</label>
-                        <input type="range" id="rate-max-slider" min="110" max="140" step="1">
-                        <span id="rate-max-value">0</span>
+                    <div class="settings-group">
+                        <h3>Descompresión (Aceleración Positiva)</h3>
+                        <div class="setting-item">
+                            <label for="recoil-min-slider">Mínimo para Completa:</label>
+                            <input type="range" id="recoil-min-slider" min="500" max="8000" step="100">
+                            <span id="recoil-min-value">0</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -196,7 +206,7 @@
         const AppState = {
             bleDevice: null, isConnecting: false, isEvaluationRunning: false,
             evaluationTimer: null, evalStats: {}, latestData: { depth: 0, recoil: 0, rate: 0, pos: 0 },
-            ui: { currentDepthHeight: 0, currentRateAngle: -90 },
+            ui: { currentDepthHeight: 0, currentRateAngle: -90, currentRate: 0 },
             selectedEvalTime: 120,
         };
 
@@ -214,6 +224,8 @@
             depthMinValue: document.getElementById('depth-min-value'), rateMinSlider: document.getElementById('rate-min-slider'),
             rateMinValue: document.getElementById('rate-min-value'), rateMaxSlider: document.getElementById('rate-max-slider'),
             rateMaxValue: document.getElementById('rate-max-value'),
+            recoilMinSlider: document.getElementById('recoil-min-slider'),
+            recoilMinValue: document.getElementById('recoil-min-value'),
             depthIdealBar: document.getElementById('depth-bar-ideal'),
             timeSelectionButtons: document.querySelectorAll('.time-button'),
         };
@@ -227,7 +239,7 @@
         
         let RANGES = {
             depth: { min: 9500, max: 13500, scale: 18000 },
-            recoil: { min: 5000 },
+            recoil: { min: 2000 },
             rate: { min: 100, max: 120, scale: 240 }
         };
 
@@ -288,12 +300,19 @@
             document.querySelector('.nav-button[data-mode="free"]').classList.add('active');
             DOM.modeContents.forEach(content => content.classList.remove('active'));
             document.getElementById('mode-free').classList.add('active');
+            
+            // Limpiar datos y UI
+            AppState.latestData = { depth: 0, recoil: 0, rate: 0, pos: 0 };
+            AppState.ui.currentRate = 0;
+            updateCard(DOM.depthCard, '-', '');
+            updateCard(DOM.recoilCard, '-', '');
+            updateCard(DOM.positionCard, '-', '');
         }
 
         // --- MANEJO DE DATOS DEL SENSOR ---
         function handleFeedback(event) {
             const value = new TextDecoder().decode(event.target.value);
-            // El ESP32 ahora envía: peak_accel, recoil_accel, rate, is_straight
+            // ESP32 envía: peak_accel, recoil_accel, rate, is_straight
             const [peak, recoil, rate, pos] = value.split(',').map(Number);
             AppState.latestData = { depth: Math.abs(peak), recoil: recoil, rate: rate, pos: pos };
             if (AppState.isEvaluationRunning) updateEvaluationStats();
@@ -308,16 +327,23 @@
         // --- BUCLE DE ANIMACIÓN Y ACTUALIZACIÓN DE UI ---
         function animationLoop() {
             const data = AppState.latestData;
+            
+            // --- PROFUNDIDAD ---
             const targetHeight = (AppState.bleDevice && AppState.bleDevice.gatt.connected) ? Math.min(100, (data.depth / RANGES.depth.scale) * 100) : 0;
             AppState.ui.currentDepthHeight += (targetHeight - AppState.ui.currentDepthHeight) * 0.2;
             DOM.depthFill.style.height = `${AppState.ui.currentDepthHeight}%`;
             
-            const rateValue = data.rate > 0 ? data.rate : 0;
+            // --- RITMO (con suavizado) ---
+            const targetRate = (AppState.bleDevice && AppState.bleDevice.gatt.connected) ? (data.rate > 0 ? data.rate : 0) : 0;
+            AppState.ui.currentRate += (targetRate - AppState.ui.currentRate) * 0.15; // Factor de suavizado
+            const rateValue = AppState.ui.currentRate;
+            
             const targetAngle = (rateValue / RANGES.rate.scale) * 180 - 90;
             AppState.ui.currentRateAngle += (targetAngle - AppState.ui.currentRateAngle) * 0.2;
             DOM.rateNeedle.style.transform = `translateX(-50%) rotate(${Math.max(-90, Math.min(90, AppState.ui.currentRateAngle))}deg)`;
             DOM.rateValueText.textContent = Math.round(rateValue);
             
+            // --- FEEDBACK CARDS ---
             let depthState = 'good', depthMsg = 'Correcto';
             if (data.depth > RANGES.depth.max) { depthState = 'bad'; depthMsg = 'Muy Profundo'; }
             else if (data.depth > 0 && data.depth < RANGES.depth.min) { depthState = 'bad'; depthMsg = 'Insuficiente'; }
@@ -336,7 +362,7 @@
         function updateCard(card, text, state) {
             const p = card.querySelector('p');
             if (p.textContent !== text) p.textContent = text;
-            if (!card.classList.contains(state)) card.className = `feedback-card ${state}`;
+            card.className = `feedback-card ${state}`;
         }
         
         // --- LÓGICA DE MODOS Y EVALUACIÓN ---
@@ -357,18 +383,17 @@
                 DOM.timeSelectionButtons.forEach(btn => btn.classList.remove('active'));
                 button.classList.add('active');
                 AppState.selectedEvalTime = parseInt(button.dataset.time, 10);
-                DOM.startEvalButton.disabled = false;
             });
         });
 
         function startEvaluation() {
-            if (!AppState.selectedEvalTime || AppState.selectedEvalTime <= 0) return;
+            if (AppState.selectedEvalTime <= 0) return;
             AppState.isEvaluationRunning = true;
             [DOM.startEvalButton, DOM.connectButton, ...DOM.navButtons, ...DOM.timeSelectionButtons].forEach(b => b.disabled = true);
             DOM.evalControls.style.display = 'none';
             DOM.timerDisplay.style.display = 'block';
             DOM.sharedUiContainer.style.display = 'block';
-            AppState.evalStats = { totalCompressions: 0, goodDepth: 0, goodRate: 0, goodRecoil: 0, goodPosition: 0 };
+            AppState.evalStats = { totalCompressions: 0, goodDepth: 0, goodRate: 0, goodRecoil: 0, goodPosition: 0, compressionHistory: [] };
             let timeLeft = AppState.selectedEvalTime;
             const updateTimerDisplay = () => { DOM.timerDisplay.textContent = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`; };
             updateTimerDisplay();
@@ -380,6 +405,13 @@
         }
 
         function updateEvaluationStats() {
+            // Solo contar si es una nueva compresión (evita doble conteo)
+            const currentTime = Date.now();
+            if (AppState.evalStats.compressionHistory.length > 0 && (currentTime - AppState.evalStats.compressionHistory[AppState.evalStats.compressionHistory.length - 1]) < 300) {
+                return; // Demasiado rápido, probablemente el mismo evento
+            }
+            AppState.evalStats.compressionHistory.push(currentTime);
+
             const data = AppState.latestData;
             AppState.evalStats.totalCompressions++;
             if (data.depth >= RANGES.depth.min && data.depth <= RANGES.depth.max) AppState.evalStats.goodDepth++;
@@ -392,17 +424,22 @@
             clearInterval(AppState.evaluationTimer);
             AppState.isEvaluationRunning = false;
             [DOM.startEvalButton, DOM.connectButton, ...DOM.navButtons].forEach(b => b.disabled = false);
+            DOM.timeSelectionButtons.forEach(b => { b.disabled = false; });
             DOM.evalControls.style.display = 'block';
             DOM.timerDisplay.style.display = 'none';
-            DOM.timeSelectionButtons.forEach(b => { b.disabled = false; });
             if (cancelled) return;
+
             const { totalCompressions, goodDepth, goodRate, goodRecoil, goodPosition } = AppState.evalStats;
             let score = 0;
             let summary = '';
             if (totalCompressions > 0) {
                 const depthPct = goodDepth / totalCompressions, ratePct = goodRate / totalCompressions, recoilPct = goodRecoil / totalCompressions, posPct = goodPosition / totalCompressions;
                 score = Math.round((depthPct * 40) + (ratePct * 35) + (recoilPct * 15) + (posPct * 10));
-                summary = `<p>Compresiones Totales: <strong>${totalCompressions}</strong></p><p>Profundidad Correcta: <strong>${Math.round(depthPct * 100)}%</strong></p><p>Ritmo Correcto: <strong>${Math.round(ratePct * 100)}%</strong></p><p>Descompresión Completa: <strong>${Math.round(recoilPct * 100)}%</strong></p>`;
+                summary = `<p>Compresiones Totales: <strong>${totalCompressions}</strong></p>
+                           <p>Profundidad Correcta: <strong>${Math.round(depthPct * 100)}%</strong></p>
+                           <p>Ritmo Correcto: <strong>${Math.round(ratePct * 100)}%</strong></p>
+                           <p>Descompresión Completa: <strong>${Math.round(recoilPct * 100)}%</strong></p>
+                           <p>Posición Correcta: <strong>${Math.round(posPct * 100)}%</strong></p>`;
             } else {
                 summary = `<p>No se detectaron compresiones.</p>`;
             }
@@ -430,6 +467,7 @@
             const sliders = [
                 { el: DOM.depthMinSlider, valEl: DOM.depthMinValue, obj: RANGES.depth, key: 'min' }, { el: DOM.depthMaxSlider, valEl: DOM.depthMaxValue, obj: RANGES.depth, key: 'max' },
                 { el: DOM.rateMinSlider,  valEl: DOM.rateMinValue,  obj: RANGES.rate,  key: 'min' }, { el: DOM.rateMaxSlider,  valEl: DOM.rateMaxValue,  obj: RANGES.rate,  key: 'max' },
+                { el: DOM.recoilMinSlider,valEl: DOM.recoilMinValue,obj: RANGES.recoil,key: 'min' },
             ];
             sliders.forEach(({ el, valEl, obj, key }) => {
                 el.addEventListener('input', () => { 
@@ -450,6 +488,7 @@
             DOM.depthMaxSlider.value = RANGES.depth.max; DOM.depthMaxValue.textContent = RANGES.depth.max;
             DOM.rateMinSlider.value = RANGES.rate.min; DOM.rateMinValue.textContent = RANGES.rate.min;
             DOM.rateMaxSlider.value = RANGES.rate.max; DOM.rateMaxValue.textContent = RANGES.rate.max;
+            DOM.recoilMinSlider.value = RANGES.recoil.min; DOM.recoilMinValue.textContent = RANGES.recoil.min;
             updateIdealZoneVisual();
         }
         
@@ -478,4 +517,3 @@
     </script>
 </body>
 </html>
-
