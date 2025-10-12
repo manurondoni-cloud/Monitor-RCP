@@ -45,13 +45,10 @@
         .viz-container { background: var(--primary-color); border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; }
         .depth-container { width: 80px; height: 220px; background: var(--secondary-color); border-radius: 10px; position: relative; overflow: hidden; border: 2px solid #444; }
         
-        /* CAMBIO 1: Se eliminan 'bottom' y 'height' del CSS para que JS los controle dinámicamente */
         #depth-bar-ideal {
-            position: absolute;
-            left: 0;
-            width: 100%;
+            position: absolute; left: 0; width: 100%;
             background: rgba(76, 175, 80, 0.3);
-            transition: bottom 0.3s ease, height 0.3s ease; /* Transición suave al cambiar valores */
+            transition: bottom 0.3s ease, height 0.3s ease;
         }
         
         #depth-bar-fill { position: absolute; bottom: 0; left: 0; width: 100%; height: 0; background: var(--accent-color); transition: height 0.1s linear, background-color 0.2s; }
@@ -72,7 +69,8 @@
         .settings-group:last-child { border-bottom: none; }
         .settings-group h3 { margin-top: 0; color: var(--accent-color); }
         .setting-item { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; }
-        .setting-item label { flex-basis: 100%; margin-bottom: 5px; text-align: left; @media (min-width: 600px) { flex-basis: 40%; } }
+        .setting-item label { flex-basis: 100%; margin-bottom: 5px; text-align: left; }
+        @media (min-width: 600px) { .setting-item label { flex-basis: 40%; } }
         .setting-item input[type="range"] { flex-grow: 1; margin: 0 15px; }
         .setting-item span { font-weight: bold; min-width: 50px; text-align: right; }
         #chart-container { width: 100%; height: 300px; background: var(--primary-color); border-radius: 12px; padding: 15px; box-sizing: border-box; margin-top: 20px; }
@@ -80,29 +78,9 @@
         #results-content { background: var(--primary-color); padding: 30px; border-radius: 15px; text-align: center; width: 90%; max-width: 500px; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
         #final-score { font-size: 5em; font-weight: bold; color: var(--accent-color); margin: 10px 0; }
-        
-        /* CAMBIO 2: Estilos para los nuevos controles de evaluación */
-        #time-selection-buttons {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin: 20px 0;
-        }
-        .time-button {
-            padding: 10px 20px;
-            font-size: 1em;
-            background-color: var(--secondary-color);
-            border: 1px solid #444;
-            color: var(--text-color);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .time-button.active {
-            background-color: var(--accent-color);
-            color: white;
-            border-color: var(--accent-hover);
-        }
+        #time-selection-buttons { display: flex; justify-content: center; gap: 10px; margin: 20px 0; }
+        .time-button { padding: 10px 20px; font-size: 1em; background-color: var(--secondary-color); border: 1px solid #444; color: var(--text-color); border-radius: 8px; cursor: pointer; transition: all 0.3s; }
+        .time-button.active { background-color: var(--accent-color); color: white; border-color: var(--accent-hover); }
     </style>
 </head>
 <body>
@@ -152,16 +130,15 @@
 
             <div id="mode-free" class="mode-content active"></div>
 
-            <!-- CAMBIO 3: Contenido del modo Evaluación actualizado con los botones de tiempo -->
             <div id="mode-evaluation" class="mode-content">
                  <div id="evaluation-controls">
                     <p>Selecciona la duración de la prueba:</p>
                     <div id="time-selection-buttons">
                         <button class="time-button" data-time="30">30 seg</button>
                         <button class="time-button" data-time="60">1 min</button>
-                        <button class="time-button" data-time="120">2 min</button>
+                        <button class="time-button active" data-time="120">2 min</button>
                     </div>
-                    <button id="start-eval-button" class="button" disabled>Iniciar Evaluación</button>
+                    <button id="start-eval-button" class="button">Iniciar Evaluación</button>
                 </div>
                 <div id="timer-display" style="display: none;">0:00</div>
             </div>
@@ -174,7 +151,6 @@
             </div>
 
             <div id="mode-settings" class="mode-content">
-                <!-- El HTML del modo Ajustes no cambia -->
                 <div class="settings-group">
                     <h3>Profundidad (Valores de Aceleración)</h3>
                     <div class="setting-item">
@@ -221,7 +197,7 @@
             bleDevice: null, isConnecting: false, isEvaluationRunning: false,
             evaluationTimer: null, evalStats: {}, latestData: { depth: 0, recoil: 0, rate: 0, pos: 0 },
             ui: { currentDepthHeight: 0, currentRateAngle: -90 },
-            selectedEvalTime: 0, // CAMBIO 4: Añadido para guardar el tiempo seleccionado
+            selectedEvalTime: 120,
         };
 
         // --- REFERENCIAS AL DOM ---
@@ -238,16 +214,24 @@
             depthMinValue: document.getElementById('depth-min-value'), rateMinSlider: document.getElementById('rate-min-slider'),
             rateMinValue: document.getElementById('rate-min-value'), rateMaxSlider: document.getElementById('rate-max-slider'),
             rateMaxValue: document.getElementById('rate-max-value'),
-            depthIdealBar: document.getElementById('depth-bar-ideal'), // CAMBIO 5
-            timeSelectionButtons: document.querySelectorAll('.time-button'), // CAMBIO 6
+            depthIdealBar: document.getElementById('depth-bar-ideal'),
+            timeSelectionButtons: document.querySelectorAll('.time-button'),
         };
 
         // --- CONSTANTES Y AJUSTES ---
-        const BLE = { /* Tu código BLE aquí, sin cambios */ };
-        let RANGES = { /* Tu código RANGES aquí, sin cambios */ };
+        const BLE = {
+            SERVICE_UUID: "4fafc201-1fb5-459e-8fcc-c5c9c331914b",
+            FEEDBACK_UUID: "beb5483e-36c1-4688-b7f5-ea07361b26a8",
+            RAW_DATA_UUID: "c23b79e7-139b-435c-83b6-d41e92b8268b"
+        };
+        
+        let RANGES = {
+            depth: { min: 9500, max: 13500, scale: 18000 },
+            recoil: { min: 5000 },
+            rate: { min: 100, max: 120, scale: 240 }
+        };
 
         // --- LÓGICA DE CONEXIÓN BLE ---
-        // Tu código de conexión (connectToDevice, onDisconnected, resetUI) va aquí, sin cambios.
         async function connectToDevice() {
             if (AppState.isConnecting) return;
             if (AppState.bleDevice && AppState.bleDevice.gatt.connected) {
@@ -289,11 +273,13 @@
                 DOM.connectButton.disabled = false;
             }
         }
+
         function onDisconnected() {
             DOM.statusDisplay.textContent = 'Dispositivo desconectado.';
             resetUI();
             if (AppState.isEvaluationRunning) endEvaluation(true);
         }
+
         function resetUI() {
             DOM.connectButton.textContent = 'Conectar al Sensor';
             DOM.modeNav.style.display = 'none';
@@ -305,13 +291,14 @@
         }
 
         // --- MANEJO DE DATOS DEL SENSOR ---
-        // Tu código de manejo de datos (handleFeedback, handleRawData) va aquí, sin cambios.
         function handleFeedback(event) {
             const value = new TextDecoder().decode(event.target.value);
-            const [peakAccel, fullRecoil, rate, isStraight] = value.split(',').map(Number);
-            AppState.latestData = { depth: Math.abs(peakAccel), recoil: fullRecoil, rate, pos: isStraight };
+            // El ESP32 ahora envía: peak_accel, recoil_accel, rate, is_straight
+            const [peak, recoil, rate, pos] = value.split(',').map(Number);
+            AppState.latestData = { depth: Math.abs(peak), recoil: recoil, rate: rate, pos: pos };
             if (AppState.isEvaluationRunning) updateEvaluationStats();
         }
+
         function handleRawData(event) {
             const value = new TextDecoder().decode(event.target.value);
             const accelValue = parseFloat(value);
@@ -319,7 +306,6 @@
         }
 
         // --- BUCLE DE ANIMACIÓN Y ACTUALIZACIÓN DE UI ---
-        // Tu código de animación (animationLoop, updateCard) va aquí, sin cambios.
         function animationLoop() {
             const data = AppState.latestData;
             const targetHeight = (AppState.bleDevice && AppState.bleDevice.gatt.connected) ? Math.min(100, (data.depth / RANGES.depth.scale) * 100) : 0;
@@ -346,6 +332,7 @@
             
             requestAnimationFrame(animationLoop);
         }
+
         function updateCard(card, text, state) {
             const p = card.querySelector('p');
             if (p.textContent !== text) p.textContent = text;
@@ -365,7 +352,6 @@
             });
         });
         
-        // CAMBIO 7: Lógica para los nuevos botones de tiempo
         DOM.timeSelectionButtons.forEach(button => {
             button.addEventListener('click', () => {
                 DOM.timeSelectionButtons.forEach(btn => btn.classList.remove('active'));
@@ -376,22 +362,15 @@
         });
 
         function startEvaluation() {
-            // CAMBIO 8: Usa el tiempo seleccionado en lugar del valor fijo
             if (!AppState.selectedEvalTime || AppState.selectedEvalTime <= 0) return;
-
             AppState.isEvaluationRunning = true;
             [DOM.startEvalButton, DOM.connectButton, ...DOM.navButtons, ...DOM.timeSelectionButtons].forEach(b => b.disabled = true);
             DOM.evalControls.style.display = 'none';
             DOM.timerDisplay.style.display = 'block';
             DOM.sharedUiContainer.style.display = 'block';
             AppState.evalStats = { totalCompressions: 0, goodDepth: 0, goodRate: 0, goodRecoil: 0, goodPosition: 0 };
-            
             let timeLeft = AppState.selectedEvalTime;
-            
-            const updateTimerDisplay = () => {
-                DOM.timerDisplay.textContent = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`;
-            };
-            
+            const updateTimerDisplay = () => { DOM.timerDisplay.textContent = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`; };
             updateTimerDisplay();
             AppState.evaluationTimer = setInterval(() => {
                 timeLeft--;
@@ -400,7 +379,14 @@
             }, 1000);
         }
 
-        function updateEvaluationStats() { /* Tu código aquí, sin cambios */ }
+        function updateEvaluationStats() {
+            const data = AppState.latestData;
+            AppState.evalStats.totalCompressions++;
+            if (data.depth >= RANGES.depth.min && data.depth <= RANGES.depth.max) AppState.evalStats.goodDepth++;
+            if (data.rate >= RANGES.rate.min && data.rate <= RANGES.rate.max) AppState.evalStats.goodRate++;
+            if (data.recoil >= RANGES.recoil.min) AppState.evalStats.goodRecoil++;
+            if (data.pos === 1) AppState.evalStats.goodPosition++;
+        }
 
         function endEvaluation(cancelled) {
             clearInterval(AppState.evaluationTimer);
@@ -408,14 +394,7 @@
             [DOM.startEvalButton, DOM.connectButton, ...DOM.navButtons].forEach(b => b.disabled = false);
             DOM.evalControls.style.display = 'block';
             DOM.timerDisplay.style.display = 'none';
-
-            // CAMBIO 9: Reactivar y limpiar botones de tiempo
-            DOM.timeSelectionButtons.forEach(b => {
-                b.disabled = false;
-                b.classList.remove('active');
-            });
-            DOM.startEvalButton.disabled = true; // Deshabilitar hasta nueva selección
-
+            DOM.timeSelectionButtons.forEach(b => { b.disabled = false; });
             if (cancelled) return;
             const { totalCompressions, goodDepth, goodRate, goodRecoil, goodPosition } = AppState.evalStats;
             let score = 0;
@@ -434,32 +413,36 @@
 
         // --- LÓGICA PARA GRÁFICOS Y AJUSTES ---
         let realtimeChart;
-        function initializeChart() { /* Tu código aquí, sin cambios */ }
-        function updateChart(value) { /* Tu código aquí, sin cambios */ }
-        
+        function initializeChart() {
+            const ctx = DOM.chartCanvas.getContext('2d');
+            realtimeChart = new Chart(ctx, {
+                type: 'line', data: { labels: Array(50).fill(''), datasets: [{ label: 'Aceleración Vertical', data: Array(50).fill(0), borderColor: 'rgb(3, 169, 244)', borderWidth: 2, pointRadius: 0, tension: 0.4 }] },
+                options: { animation: false, scales: { y: { min: -20000, max: 20000, ticks: { color: '#888' } }, x: { ticks: { display: false } } }, plugins: { legend: { display: false } }, maintainAspectRatio: false }
+            });
+        }
+        function updateChart(value) {
+            if (!realtimeChart) return;
+            realtimeChart.data.datasets[0].data.push(value);
+            realtimeChart.data.datasets[0].data.shift();
+            realtimeChart.update('none');
+        }
         function setupSettings() {
             const sliders = [
                 { el: DOM.depthMinSlider, valEl: DOM.depthMinValue, obj: RANGES.depth, key: 'min' }, { el: DOM.depthMaxSlider, valEl: DOM.depthMaxValue, obj: RANGES.depth, key: 'max' },
                 { el: DOM.rateMinSlider,  valEl: DOM.rateMinValue,  obj: RANGES.rate,  key: 'min' }, { el: DOM.rateMaxSlider,  valEl: DOM.rateMaxValue,  obj: RANGES.rate,  key: 'max' },
             ];
             sliders.forEach(({ el, valEl, obj, key }) => {
-                el.addEventListener('input', () => {
-                    const value = parseFloat(el.value);
-                    obj[key] = value;
-                    valEl.textContent = value;
+                el.addEventListener('input', () => { 
+                    const value = parseFloat(el.value); 
+                    obj[key] = value; 
+                    valEl.textContent = value; 
                     saveSettings();
-                    
-                    // CAMBIO 10: Si el slider es de profundidad, actualiza la visualización
-                    if (key === 'min' || key === 'max') {
-                        updateIdealZoneVisual();
-                    }
+                    if (el.id.includes('depth')) updateIdealZoneVisual();
                 });
             });
             loadSettings();
         }
-
         function saveSettings() { localStorage.setItem('rcpAppSettings', JSON.stringify(RANGES)); }
-
         function loadSettings() {
             const saved = localStorage.getItem('rcpAppSettings');
             if (saved) { RANGES = JSON.parse(saved); }
@@ -467,21 +450,16 @@
             DOM.depthMaxSlider.value = RANGES.depth.max; DOM.depthMaxValue.textContent = RANGES.depth.max;
             DOM.rateMinSlider.value = RANGES.rate.min; DOM.rateMinValue.textContent = RANGES.rate.min;
             DOM.rateMaxSlider.value = RANGES.rate.max; DOM.rateMaxValue.textContent = RANGES.rate.max;
-
-            // CAMBIO 11: Llama a la función para establecer la barra verde al cargar la página
             updateIdealZoneVisual();
         }
-
-        // CAMBIO 12: Nueva función para actualizar la barra de zona ideal dinámicamente
+        
         function updateIdealZoneVisual() {
             const scale = RANGES.depth.scale;
             const min = RANGES.depth.min;
             const max = RANGES.depth.max;
-
             if (scale > 0 && max > min) {
                 const bottomPercent = (min / scale) * 100;
                 const heightPercent = ((max - min) / scale) * 100;
-                
                 DOM.depthIdealBar.style.bottom = `${bottomPercent}%`;
                 DOM.depthIdealBar.style.height = `${heightPercent}%`;
             }
@@ -500,3 +478,4 @@
     </script>
 </body>
 </html>
+
