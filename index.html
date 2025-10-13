@@ -246,93 +246,57 @@
         };
 
         // --- LÓGICA DE CONEXIÓN BLE ---
-        function handleConnectButtonClick() {
-            if (AppState.isConnecting) return;
-
-            if (AppState.bleDevice && AppState.bleDevice.gatt.connected) {
-                disconnectFromDevice();
-            } else {
-                connectToDevice();
-            }
-        }
-
         async function connectToDevice() {
+            if (AppState.isConnecting) return;
+            if (AppState.bleDevice && AppState.bleDevice.gatt.connected) {
+                AppState.bleDevice.gatt.disconnect();
+                return;
+            }
+            
             AppState.isConnecting = true;
             DOM.spinner.style.display = 'block';
             DOM.connectButton.disabled = true;
             DOM.statusDisplay.textContent = 'Buscando dispositivos...';
 
             try {
-                console.log('Solicitando dispositivo Bluetooth...');
-                AppState.bleDevice = await navigator.bluetooth.requestDevice({
-                    filters: [{ services: [BLE.SERVICE_UUID] }],
-                    optionalServices: [BLE.SERVICE_UUID]
-                });
-                
-                console.log('Dispositivo seleccionado:', AppState.bleDevice.name);
+                AppState.bleDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: [BLE.SERVICE_UUID] }] });
                 AppState.bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
-                DOM.statusDisplay.textContent = `Conectando a ${AppState.bleDevice.name}...`;
-                
+                DOM.statusDisplay.textContent = 'Conectando...';
                 const server = await AppState.bleDevice.gatt.connect();
-                console.log('Conectado al servidor GATT.');
-                
                 const service = await server.getPrimaryService(BLE.SERVICE_UUID);
-                console.log('Servicio primario obtenido.');
                 
                 const feedbackChar = await service.getCharacteristic(BLE.FEEDBACK_UUID);
                 await feedbackChar.startNotifications();
                 feedbackChar.addEventListener('characteristicvaluechanged', handleFeedback);
-                console.log('Suscrito a notificaciones de feedback.');
                 
                 const rawDataChar = await service.getCharacteristic(BLE.RAW_DATA_UUID);
                 await rawDataChar.startNotifications();
                 rawDataChar.addEventListener('characteristicvaluechanged', handleRawData);
-                console.log('Suscrito a notificaciones de datos en crudo.');
                 
-                DOM.statusDisplay.textContent = `¡Conectado a ${AppState.bleDevice.name}!`;
+                DOM.statusDisplay.textContent = '¡Conectado!';
                 DOM.connectButton.textContent = 'Desconectar';
                 DOM.modeNav.style.display = 'flex';
                 document.querySelector('.nav-button[data-mode="free"]').click();
 
             } catch (error) {
-                console.error('Error de Conexión BLE:', error);
-                if (error.name === 'NotFoundError') {
-                    DOM.statusDisplay.textContent = 'No se seleccionó ningún dispositivo.';
-                } else {
-                    DOM.statusDisplay.textContent = `Error: ${error.message.split('.')[0]}`;
-                }
-                resetConnectionState();
+                console.error('Error de Conexión:', error);
+                DOM.statusDisplay.textContent = `Error: ${error.message.split('.')[0]}`;
+                resetUI();
             } finally {
                 AppState.isConnecting = false;
                 DOM.spinner.style.display = 'none';
                 DOM.connectButton.disabled = false;
             }
         }
-        
-        function disconnectFromDevice() {
-            if (!AppState.bleDevice || !AppState.bleDevice.gatt.connected) {
-                console.log("Intento de desconexión sin estar conectado.");
-                return;
-            }
-            console.log('Desconectando del dispositivo...');
-            AppState.bleDevice.gatt.disconnect();
-        }
 
         function onDisconnected() {
-            console.log('Dispositivo desconectado.');
             DOM.statusDisplay.textContent = 'Dispositivo desconectado.';
             resetUI();
-            resetConnectionState();
             if (AppState.isEvaluationRunning) endEvaluation(true);
         }
 
-        function resetConnectionState() {
-            AppState.bleDevice = null;
-            DOM.connectButton.textContent = 'Conectar al Sensor';
-        }
-
         function resetUI() {
-            resetConnectionState();
+            DOM.connectButton.textContent = 'Conectar al Sensor';
             DOM.modeNav.style.display = 'none';
             DOM.sharedUiContainer.style.display = 'none';
             document.querySelector('.nav-button[data-mode="free"]').click();
@@ -343,7 +307,6 @@
             updateCard(DOM.positionCard, '-', '');
             resetCalibration();
         }
-
 
         // --- MANEJO DE DATOS DEL SENSOR ---
         function handleFeedback(event) {
@@ -398,6 +361,7 @@
             };
             DOM.startCalibrationButton.textContent = 'Iniciar Calibración';
             DOM.calibrationSuggestion.style.display = 'none';
+            DOM.calibrationSuggestion.innerHTML = '';
             updateCalibrationUI();
         }
 
@@ -457,13 +421,21 @@
         function animationLoop() {
             const data = AppState.latestData;
             
-            const isConnected = AppState.bleDevice && AppState.bleDevice.gatt.connected;
-            
-            const targetHeight = isConnected ? Math.min(100, (data.depth / RANGES.depth.scale) * 100) : 0;
+            const targetHeight = (AppState.bleDevice && AppState.bleDevice.gatt.connected) ? Math.min(100, (data.depth / RANGES.depth.scale) * 100) : 0;
             AppState.ui.currentDepthHeight += (targetHeight - AppState.ui.currentDepthHeight) * 0.2;
             DOM.depthFill.style.height = `${AppState.ui.currentDepthHeight}%`;
             
-            const targetRate = isConnected && data.rate > 0 ? data.rate : 0;
+            let depthState = 'good', depthMsg = 'Correcto';
+            if(data.depth > 0) { // Only provide feedback if there is a compression
+                if (data.depth > RANGES.depth.max) { depthState = 'bad'; depthMsg = 'Muy Profundo'; }
+                else if (data.depth < RANGES.depth.min) { depthState = 'bad'; depthMsg = 'Insuficiente'; }
+            } else {
+                 depthState = ''; depthMsg = '-';
+            }
+            DOM.depthFill.style.backgroundColor = `var(--${depthState}-color)`;
+            updateCard(DOM.depthCard, depthMsg, depthState);
+            
+            const targetRate = (AppState.bleDevice && AppState.bleDevice.gatt.connected) ? (data.rate > 0 ? data.rate : 0) : 0;
             AppState.ui.currentRate += (targetRate - AppState.ui.currentRate) * 0.15;
             const rateValue = AppState.ui.currentRate;
             
@@ -472,19 +444,11 @@
             DOM.rateNeedle.style.transform = `translateX(-50%) rotate(${Math.max(-90, Math.min(90, AppState.ui.currentRateAngle))}deg)`;
             DOM.rateValueText.textContent = Math.round(rateValue);
             
-            if (isConnected) {
-                let depthState = 'good', depthMsg = 'Correcto';
-                if (data.depth > RANGES.depth.max) { depthState = 'bad'; depthMsg = 'Muy Profundo'; }
-                else if (data.depth > 0 && data.depth < RANGES.depth.min) { depthState = 'bad'; depthMsg = 'Insuficiente'; }
-                DOM.depthFill.style.backgroundColor = `var(--${depthState}-color)`;
-                updateCard(DOM.depthCard, depthMsg, depthState);
-                
-                let recoilState = data.recoil >= RANGES.recoil.min ? 'good' : 'bad';
-                updateCard(DOM.recoilCard, recoilState === 'good' ? 'Completa' : 'Incompleta', recoilState);
-                
-                let posState = data.pos === 1 ? 'good' : 'bad';
-                updateCard(DOM.positionCard, posState === 'good' ? 'Correcta' : 'Incorrecta', posState);
-            }
+            let recoilState = data.depth > 0 ? (data.recoil >= RANGES.recoil.min ? 'good' : 'bad') : '';
+            updateCard(DOM.recoilCard, data.depth > 0 ? (recoilState === 'good' ? 'Completa' : 'Incompleta') : '-', recoilState);
+            
+            let posState = data.depth > 0 ? (data.pos === 1 ? 'good' : 'bad') : '';
+            updateCard(DOM.positionCard, data.depth > 0 ? (posState === 'good' ? 'Correcta' : 'Incorrecta') : '-', posState);
             
             requestAnimationFrame(animationLoop);
         }
@@ -496,27 +460,36 @@
         }
         
         // --- LÓGICA DE MODOS Y EVALUACIÓN ---
-        DOM.navButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                if (AppState.isEvaluationRunning || AppState.calibration.isActive) return;
-                const targetMode = button.dataset.mode;
-                DOM.navButtons.forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
-                DOM.modeContents.forEach(content => content.classList.remove('active'));
-                document.getElementById(`mode-${targetMode}`).classList.add('active');
-                
-                const showSharedUi = (targetMode === 'free' || targetMode === 'evaluation');
-                DOM.sharedUiContainer.style.display = showSharedUi ? 'block' : 'none';
+        function setupModeSwitcher() {
+            DOM.navButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    if (AppState.isEvaluationRunning || AppState.calibration.isActive) return;
+                    const targetMode = button.dataset.mode;
+                    DOM.navButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    DOM.modeContents.forEach(content => content.classList.remove('active'));
+                    document.getElementById(`mode-${targetMode}`).classList.add('active');
+                    
+                    const showSharedUi = (targetMode === 'free' || targetMode === 'evaluation');
+                    DOM.sharedUiContainer.style.display = showSharedUi ? 'block' : 'none';
+                });
             });
-        });
+        }
         
-        DOM.timeSelectionButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                DOM.timeSelectionButtons.forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
-                AppState.selectedEvalTime = parseInt(button.dataset.time, 10);
+        function setupEvalControls() {
+            DOM.timeSelectionButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    if (AppState.isEvaluationRunning) return;
+                    DOM.timeSelectionButtons.forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    AppState.selectedEvalTime = parseInt(button.dataset.time, 10);
+                });
             });
-        });
+            DOM.startEvalButton.addEventListener('click', startEvaluation);
+            DOM.closeModalButton.addEventListener('click', () => {
+                DOM.resultsModal.style.display = 'none';
+            });
+        }
 
         function startEvaluation() { /* (Función de evaluación sin cambios) */ }
         function updateEvaluationStats() { /* (Función de evaluación sin cambios) */ }
@@ -537,6 +510,7 @@
             realtimeChart.data.datasets[0].data.shift();
             realtimeChart.update('none');
         }
+
         function setupSettings() {
             const sliders = [
                 { el: DOM.depthMinSlider, valEl: DOM.depthMinValue, obj: RANGES.depth, key: 'min' }, { el: DOM.depthMaxSlider, valEl: DOM.depthMaxValue, obj: RANGES.depth, key: 'max' },
@@ -554,10 +528,22 @@
             });
             loadSettings();
         }
+
         function saveSettings() { localStorage.setItem('rcpAppSettings', JSON.stringify(RANGES)); }
+        
         function loadSettings() {
             const saved = localStorage.getItem('rcpAppSettings');
-            if (saved) { RANGES = JSON.parse(saved); }
+            if (saved) { 
+                try {
+                    const parsedSettings = JSON.parse(saved);
+                    // Merge saved settings with defaults to avoid errors if structure changes
+                    Object.assign(RANGES.depth, parsedSettings.depth);
+                    Object.assign(RANGES.rate, parsedSettings.rate);
+                    Object.assign(RANGES.recoil, parsedSettings.recoil);
+                } catch(e) {
+                    console.error("Could not parse saved settings:", e);
+                }
+            }
             DOM.depthMinSlider.value = RANGES.depth.min; DOM.depthMinValue.textContent = RANGES.depth.min;
             DOM.depthMaxSlider.value = RANGES.depth.max; DOM.depthMaxValue.textContent = RANGES.depth.max;
             DOM.rateMinSlider.value = RANGES.rate.min; DOM.rateMinValue.textContent = RANGES.rate.min;
@@ -565,34 +551,24 @@
             DOM.recoilMinSlider.value = RANGES.recoil.min; DOM.recoilMinValue.textContent = RANGES.recoil.min;
             updateIdealZoneVisual();
         }
-        
+
         function updateIdealZoneVisual() {
-            const scale = RANGES.depth.scale, min = RANGES.depth.min, max = RANGES.depth.max;
-            if (scale > 0 && max > min) {
-                const bottomPercent = (min / scale) * 100;
-                const heightPercent = ((max - min) / scale) * 100;
-                DOM.depthIdealBar.style.bottom = `${bottomPercent}%`;
-                DOM.depthIdealBar.style.height = `${heightPercent}%`;
-            }
+            const minPercent = (RANGES.depth.min / RANGES.depth.scale) * 100;
+            const maxPercent = (RANGES.depth.max / RANGES.depth.scale) * 100;
+            DOM.depthIdealBar.style.bottom = `${minPercent}%`;
+            DOM.depthIdealBar.style.height = `${maxPercent - minPercent}%`;
         }
 
-        // --- INICIALIZACIÓN ---
-        document.addEventListener('DOMContentLoaded', () => {
-            DOM.connectButton.addEventListener('click', handleConnectButtonClick);
+        // --- INICIALIZACIÓN DE LA APLICACIÓN ---
+        window.addEventListener('DOMContentLoaded', () => {
+            DOM.connectButton.addEventListener('click', connectToDevice);
+            DOM.startCalibrationButton.addEventListener('click', startCalibration);
             
-            DOM.startEvalButton.addEventListener('click', startEvaluation);
-            DOM.closeModalButton.addEventListener('click', () => { DOM.resultsModal.style.display = 'none'; });
-            DOM.startCalibrationButton.addEventListener('click', () => {
-                if (AppState.calibration.isActive || AppState.calibration.step === 'done') {
-                    resetCalibration();
-                } else {
-                    startCalibration();
-                }
-            });
-            
-            initializeChart();
+            setupModeSwitcher();
+            setupEvalControls();
             setupSettings();
-            requestAnimationFrame(animationLoop);
+            initializeChart();
+            animationLoop();
         });
     </script>
 </body>
