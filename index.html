@@ -112,9 +112,20 @@
             </div>
 
             <div id="mode-free" class="mode-content active"></div>
-            <div id="mode-evaluation" class="mode-content"> /* ... Contenido Evaluación ... */ </div>
             
-            <!-- --- NUEVO MODO DE CALIBRACIÓN --- -->
+            <div id="mode-evaluation" class="mode-content">
+                <div id="evaluation-controls">
+                    <p>Selecciona la duración de la prueba:</p>
+                    <div id="time-selection-buttons">
+                        <button class="time-button" data-time="30">30 seg</button>
+                        <button class="time-button" data-time="60">1 min</button>
+                        <button class="time-button active" data-time="120">2 min</button>
+                    </div>
+                    <button id="start-eval-button" class="button">Iniciar Evaluación</button>
+                </div>
+                <div id="timer-display" style="display: none; font-size: 2em; margin: 20px;">0:00</div>
+            </div>
+
             <div id="mode-calibration" class="mode-content">
                 <h2>Calibración de Profundidad</h2>
                 <p>Realiza entre 5 y 10 compresiones fuertes y consistentes para calibrar el sensor con tu maniquí.</p>
@@ -123,12 +134,59 @@
                 <button id="clear-calibration-button" class="button" style="margin-top: 20px;">Reiniciar Calibración</button>
             </div>
 
-            <div id="mode-raw" class="mode-content"> /* ... Contenido Datos en Vivo ... */ </div>
-            <div id="mode-settings" class="mode-content"> /* ... Contenido Ajustes ... */ </div>
+            <div id="mode-raw" class="mode-content">
+                <h2>Gráfico de Aceleración en Tiempo Real</h2>
+                <div id="chart-container"><canvas id="realtime-chart"></canvas></div>
+            </div>
+            
+            <div id="mode-settings" class="mode-content">
+                <div class="settings-group">
+                    <h3>Profundidad (Valores de Aceleración)</h3>
+                    <div class="setting-item">
+                        <label for="depth-min-slider">Mínimo Correcto:</label>
+                        <input type="range" id="depth-min-slider" min="5000" max="12000" step="100">
+                        <span id="depth-min-value">0</span>
+                    </div>
+                    <div class="setting-item">
+                        <label for="depth-max-slider">Máximo Correcto:</label>
+                        <input type="range" id="depth-max-slider" min="12000" max="20000" step="100">
+                        <span id="depth-max-value">0</span>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <h3>Ritmo (Compresiones por Minuto)</h3>
+                    <div class="setting-item">
+                        <label for="rate-min-slider">Mínimo Correcto:</label>
+                        <input type="range" id="rate-min-slider" min="80" max="110" step="1">
+                        <span id="rate-min-value">0</span>
+                    </div>
+                     <div class="setting-item">
+                        <label for="rate-max-slider">Máximo Correcto:</label>
+                        <input type="range" id="rate-max-slider" min="110" max="140" step="1">
+                        <span id="rate-max-value">0</span>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <h3>Descompresión (Aceleración Positiva)</h3>
+                    <div class="setting-item">
+                        <label for="recoil-min-slider">Mínimo para Completa:</label>
+                        <input type="range" id="recoil-min-slider" min="500" max="8000" step="100">
+                        <span id="recoil-min-value">0</span>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
     
-    <!-- (El modal de resultados no se copia aquí por brevedad, no tiene cambios) -->
+    <div id="results-modal">
+        <div id="results-content">
+            <h2>¡Evaluación Completada!</h2>
+            <p>Puntaje Final:</p>
+            <p id="final-score">0</p>
+            <div id="results-summary"></div>
+            <button id="close-modal-button" class="button">Intentar de Nuevo</button>
+        </div>
+    </div>
 
     <script>
         // --- ESTADO DE LA APLICACIÓN ---
@@ -138,29 +196,38 @@
             latestData: { depth: 0, recoil: 0, rate: 0, pos: 0 },
             ui: { currentDepthHeight: 0, currentRateAngle: -90, currentRate: 0 },
             selectedEvalTime: 120,
-            calibrationData: [] // --- NUEVO: Array para guardar datos de calibración
+            calibrationData: []
         };
 
-        // --- REFERENCIAS AL DOM (AÑADIR ELEMENTOS DE CALIBRACIÓN) ---
+        // --- REFERENCIAS AL DOM ---
         const DOM = {
-            //... (Elementos existentes) ...
+            connectButton: document.getElementById('connect-button'), statusDisplay: document.getElementById('status'), spinner: document.getElementById('spinner'),
+            modeNav: document.getElementById('mode-nav'), navButtons: document.querySelectorAll('.nav-button'), modeContents: document.querySelectorAll('.mode-content'),
+            sharedUiContainer: document.getElementById('shared-ui-container'), depthFill: document.getElementById('depth-bar-fill'), rateNeedle: document.getElementById('rate-needle'),
+            rateValueText: document.getElementById('rate-value'), depthCard: document.getElementById('depth-card'), recoilCard: document.getElementById('recoil-card'),
+            positionCard: document.getElementById('position-card'), startEvalButton: document.getElementById('start-eval-button'), timerDisplay: document.getElementById('timer-display'),
+            evalControls: document.getElementById('evaluation-controls'), resultsModal: document.getElementById('results-modal'), finalScoreText: document.getElementById('final-score'),
+            resultsSummary: document.getElementById('results-summary'), closeModalButton: document.getElementById('close-modal-button'),
+            chartCanvas: document.getElementById('realtime-chart'), depthMinSlider: document.getElementById('depth-min-slider'),
+            depthMaxValue: document.getElementById('depth-max-value'), depthMaxSlider: document.getElementById('depth-max-slider'),
+            depthMinValue: document.getElementById('depth-min-value'), rateMinSlider: document.getElementById('rate-min-slider'),
+            rateMinValue: document.getElementById('rate-min-value'), rateMaxSlider: document.getElementById('rate-max-slider'),
             rateMaxValue: document.getElementById('rate-max-value'),
             recoilMinSlider: document.getElementById('recoil-min-slider'),
             recoilMinValue: document.getElementById('recoil-min-value'),
             depthIdealBar: document.getElementById('depth-bar-ideal'),
             timeSelectionButtons: document.querySelectorAll('.time-button'),
-            // --- NUEVO ---
             calibrationResultsList: document.getElementById('calibration-results-list'),
             calibrationSuggestion: document.getElementById('calibration-suggestion'),
             clearCalibrationButton: document.getElementById('clear-calibration-button'),
         };
 
-        // --- CONSTANTES Y AJUSTES (AÑADIR UUID DE CALIBRACIÓN) ---
+        // --- CONSTANTES Y AJUSTES ---
         const BLE = {
             SERVICE_UUID: "4fafc201-1fb5-459e-8fcc-c5c9c331914b",
             FEEDBACK_UUID: "beb5483e-36c1-4688-b7f5-ea07361b26a8",
             RAW_DATA_UUID: "c23b79e7-139b-435c-83b6-d41e92b8268b",
-            CALIBRATION_UUID: "1c953582-c23c-449e-b8a7-54c798c8a1b5" // --- NUEVO ---
+            CALIBRATION_UUID: "1c953582-c23c-449e-b8a7-54c798c8a1b5"
         };
         
         let RANGES = {
@@ -169,12 +236,25 @@
             rate: { min: 100, max: 120, scale: 240 }
         };
 
-        // --- LÓGICA DE CONEXIÓN BLE (MODIFICADA) ---
+        // --- LÓGICA DE CONEXIÓN BLE ---
         async function connectToDevice() {
             if (AppState.isConnecting) return;
-            // ... (resto del código igual) ...
+            if (AppState.bleDevice && AppState.bleDevice.gatt.connected) {
+                AppState.bleDevice.gatt.disconnect();
+                return;
+            }
+            
+            AppState.isConnecting = true;
+            DOM.spinner.style.display = 'block';
+            DOM.connectButton.disabled = true;
+            DOM.statusDisplay.textContent = 'Buscando dispositivos...';
+
             try {
-                // ... (conexión, servicio, etc.) ...
+                AppState.bleDevice = await navigator.bluetooth.requestDevice({ filters: [{ services: [BLE.SERVICE_UUID] }] });
+                AppState.bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+                DOM.statusDisplay.textContent = 'Conectando...';
+                const server = await AppState.bleDevice.gatt.connect();
+                const service = await server.getPrimaryService(BLE.SERVICE_UUID);
                 
                 const feedbackChar = await service.getCharacteristic(BLE.FEEDBACK_UUID);
                 await feedbackChar.startNotifications();
@@ -184,37 +264,67 @@
                 await rawDataChar.startNotifications();
                 rawDataChar.addEventListener('characteristicvaluechanged', handleRawData);
 
-                // --- NUEVO: Suscribirse a la característica de calibración ---
                 const calibrationChar = await service.getCharacteristic(BLE.CALIBRATION_UUID);
                 await calibrationChar.startNotifications();
                 calibrationChar.addEventListener('characteristicvaluechanged', handleCalibrationData);
                 
-                // ... (UI post-conexión) ...
+                DOM.statusDisplay.textContent = '¡Conectado!';
+                DOM.connectButton.textContent = 'Desconectar';
+                DOM.modeNav.style.display = 'flex';
+                DOM.sharedUiContainer.style.display = 'block';
+                document.querySelector('.nav-button[data-mode="free"]').click();
             } catch (error) {
-                // ... (manejo de error) ...
+                console.error('Error de Conexión:', error);
+                DOM.statusDisplay.textContent = `Error: ${error.message.split('.')[0]}`;
+                resetUI();
             } finally {
-                // ... (finalización) ...
+                AppState.isConnecting = false;
+                DOM.spinner.style.display = 'none';
+                DOM.connectButton.disabled = false;
             }
         }
-        
-        function onDisconnected() {
-            // ... (código existente sin cambios) ...
-        }
-        
-        // --- MANEJO DE DATOS (NUEVA FUNCIÓN) ---
-        function handleFeedback(event) { /* ... (código existente sin cambios) ... */ }
-        function handleRawData(event) { /* ... (código existente sin cambios) ... */ }
 
-        // --- NUEVO: Manejador para los datos de calibración ---
+        function onDisconnected() {
+            DOM.statusDisplay.textContent = 'Dispositivo desconectado.';
+            resetUI();
+            if (AppState.isEvaluationRunning) endEvaluation(true);
+        }
+
+        function resetUI() {
+            DOM.connectButton.textContent = 'Conectar al Sensor';
+            DOM.modeNav.style.display = 'none';
+            DOM.sharedUiContainer.style.display = 'none';
+            document.querySelector('.nav-button[data-mode="free"]').click();
+            AppState.latestData = { depth: 0, recoil: 0, rate: 0, pos: 0 };
+            AppState.ui.currentRate = 0;
+            updateCard(DOM.depthCard, '-', '');
+            updateCard(DOM.recoilCard, '-', '');
+            updateCard(DOM.positionCard, '-', '');
+            resetCalibration();
+        }
+
+        // --- MANEJO DE DATOS DEL SENSOR ---
+        function handleFeedback(event) {
+            const value = new TextDecoder().decode(event.target.value);
+            const [peak, recoil, rate, pos] = value.split(',').map(Number);
+            AppState.latestData = { depth: Math.abs(peak), recoil: recoil, rate: rate, pos: pos };
+            if (AppState.isEvaluationRunning) updateEvaluationStats();
+        }
+
+        function handleRawData(event) {
+            const value = new TextDecoder().decode(event.target.value);
+            const accelValue = parseFloat(value);
+            updateChart(accelValue);
+        }
+
         function handleCalibrationData(event) {
             const value = new TextDecoder().decode(event.target.value);
             const [accel, depth] = value.split(',').map(Number);
-            if (!accel || !depth) return;
+            if (isNaN(accel) || isNaN(depth)) return;
 
             const dataPoint = { accel: Math.abs(accel), depth: depth };
             AppState.calibrationData.push(dataPoint);
             
-            // Actualizar UI
             const listItem = document.createElement('li');
             listItem.innerHTML = `Pico Aceleración: <strong>${dataPoint.accel}</strong> &rarr; Profundidad: <strong>${dataPoint.depth.toFixed(2)} cm</strong>`;
             DOM.calibrationResultsList.prepend(listItem);
@@ -222,18 +332,13 @@
             updateCalibrationSuggestion();
         }
 
-        // --- NUEVO: Función para analizar datos y mostrar sugerencia ---
         function updateCalibrationSuggestion() {
-            if (AppState.calibrationData.length < 3) return; // Esperar al menos 3 muestras
+            if (AppState.calibrationData.length < 3) return;
 
-            const idealDepthMin = 5.0;
-            const idealDepthMax = 6.0;
+            const idealDepthMin = 5.0, idealDepthMax = 6.0;
+            const goodCompressions = AppState.calibrationData.filter(p => p.depth >= idealDepthMin && p.depth <= idealDepthMax);
 
-            const goodCompressions = AppState.calibrationData.filter(
-                p => p.depth >= idealDepthMin && p.depth <= idealDepthMax
-            );
-
-            if (goodCompressions.length < 2) { // Necesitamos al menos 2 compresiones en el rango ideal
+            if (goodCompressions.length < 2) {
                 DOM.calibrationSuggestion.style.display = 'block';
                 DOM.calibrationSuggestion.innerHTML = `<p>Sigue realizando compresiones. Intenta alcanzar una profundidad entre 5 y 6 cm.</p>`;
                 return;
@@ -242,7 +347,6 @@
             const totalAccel = goodCompressions.reduce((sum, p) => sum + p.accel, 0);
             const averageAccel = totalAccel / goodCompressions.length;
             
-            // Sugerir un rango de +/- 1500 alrededor del promedio encontrado para 5-6 cm
             const suggestedMin = Math.round((averageAccel - 1500) / 100) * 100;
             const suggestedMax = Math.round((averageAccel + 1500) / 100) * 100;
 
@@ -256,36 +360,54 @@
                     <li>Máximo Correcto: <strong>${suggestedMax}</strong></li>
                 </ul>
             `;
-             /*
-                // --- FUTURA MEJORA: Botón para aplicar automáticamente ---
-                const applyBtn = document.createElement('button');
-                applyBtn.textContent = 'Aplicar Sugerencia';
-                applyBtn.className = 'button';
-                applyBtn.onclick = () => {
-                    DOM.depthMinSlider.value = suggestedMin;
-                    DOM.depthMaxSlider.value = suggestedMax;
-                    // Trigger input event to update values
-                    DOM.depthMinSlider.dispatchEvent(new Event('input'));
-                    DOM.depthMaxSlider.dispatchEvent(new Event('input'));
-                    alert('¡Ajustes aplicados!');
-                };
-                DOM.calibrationSuggestion.appendChild(applyBtn);
-            */
         }
         
         function resetCalibration() {
             AppState.calibrationData = [];
             DOM.calibrationResultsList.innerHTML = '';
             DOM.calibrationSuggestion.style.display = 'none';
+            DOM.calibrationSuggestion.innerHTML = '';
         }
 
+        // --- BUCLE DE ANIMACIÓN Y ACTUALIZACIÓN DE UI ---
+        function animationLoop() {
+            const data = AppState.latestData;
+            
+            const targetHeight = (AppState.bleDevice && AppState.bleDevice.gatt.connected) ? Math.min(100, (data.depth / RANGES.depth.scale) * 100) : 0;
+            AppState.ui.currentDepthHeight += (targetHeight - AppState.ui.currentDepthHeight) * 0.2;
+            DOM.depthFill.style.height = `${AppState.ui.currentDepthHeight}%`;
+            
+            const targetRate = (AppState.bleDevice && AppState.bleDevice.gatt.connected) ? (data.rate > 0 ? data.rate : 0) : 0;
+            AppState.ui.currentRate += (targetRate - AppState.ui.currentRate) * 0.15;
+            const rateValue = AppState.ui.currentRate;
+            
+            const targetAngle = (rateValue / RANGES.rate.scale) * 180 - 90;
+            AppState.ui.currentRateAngle += (targetAngle - AppState.ui.currentRateAngle) * 0.2;
+            DOM.rateNeedle.style.transform = `translateX(-50%) rotate(${Math.max(-90, Math.min(90, AppState.ui.currentRateAngle))}deg)`;
+            DOM.rateValueText.textContent = Math.round(rateValue);
+            
+            let depthState = 'good', depthMsg = 'Correcto';
+            if (data.depth > RANGES.depth.max) { depthState = 'bad'; depthMsg = 'Muy Profundo'; }
+            else if (data.depth > 0 && data.depth < RANGES.depth.min) { depthState = 'bad'; depthMsg = 'Insuficiente'; }
+            DOM.depthFill.style.backgroundColor = `var(--${depthState}-color)`;
+            updateCard(DOM.depthCard, depthMsg, depthState);
+            
+            let recoilState = data.recoil >= RANGES.recoil.min ? 'good' : 'bad';
+            updateCard(DOM.recoilCard, recoilState === 'good' ? 'Completa' : 'Incompleta', recoilState);
+            
+            let posState = data.pos === 1 ? 'good' : 'bad';
+            updateCard(DOM.positionCard, posState === 'good' ? 'Correcta' : 'Incorrecta', posState);
+            
+            requestAnimationFrame(animationLoop);
+        }
 
-        // --- BUCLE DE ANIMACIÓN Y ACTUALIZACIÓN DE UI (SIN CAMBIOS) ---
-        function animationLoop() { /* ... (código existente sin cambios) ... */ }
-        function updateCard(card, text, state) { /* ... (código existente sin cambios) ... */ }
-
+        function updateCard(card, text, state) {
+            const p = card.querySelector('p');
+            if (p.textContent !== text) p.textContent = text;
+            card.className = `feedback-card ${state}`;
+        }
         
-        // --- LÓGICA DE MODOS Y EVALUACIÓN (MODIFICADA) ---
+        // --- LÓGICA DE MODOS Y EVALUACIÓN ---
         DOM.navButtons.forEach(button => {
             button.addEventListener('click', () => {
                 if (AppState.isEvaluationRunning) return;
@@ -295,32 +417,137 @@
                 DOM.modeContents.forEach(content => content.classList.remove('active'));
                 document.getElementById(`mode-${targetMode}`).classList.add('active');
                 
-                // Ocultar UI compartida en modos que no la usan
                 const showSharedUi = (targetMode === 'free' || targetMode === 'evaluation');
                 DOM.sharedUiContainer.style.display = showSharedUi ? 'block' : 'none';
             });
         });
         
-        // --- (resto de funciones de evaluación, gráficos, ajustes e inicialización sin cambios) ---
-        // ... (startEvaluation, endEvaluation, initializeChart, setupSettings, etc.) ...
+        DOM.timeSelectionButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                DOM.timeSelectionButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                AppState.selectedEvalTime = parseInt(button.dataset.time, 10);
+            });
+        });
 
+        function startEvaluation() {
+            if (AppState.selectedEvalTime <= 0) return;
+            AppState.isEvaluationRunning = true;
+            [...DOM.navButtons, ...DOM.timeSelectionButtons, DOM.startEvalButton, DOM.connectButton].forEach(b => b.disabled = true);
+            DOM.evalControls.style.display = 'none';
+            DOM.timerDisplay.style.display = 'block';
+            AppState.evalStats = { totalCompressions: 0, goodDepth: 0, goodRate: 0, goodRecoil: 0, goodPosition: 0, compressionHistory: [] };
+            let timeLeft = AppState.selectedEvalTime;
+            const updateTimerDisplay = () => { DOM.timerDisplay.textContent = `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`; };
+            updateTimerDisplay();
+            AppState.evaluationTimer = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+                if (timeLeft <= 0) endEvaluation(false);
+            }, 1000);
+        }
 
-        // --- INICIALIZACIÓN (MODIFICADA) ---
+        function updateEvaluationStats() {
+            const currentTime = Date.now();
+            if (AppState.evalStats.compressionHistory.length > 0 && (currentTime - AppState.evalStats.compressionHistory.slice(-1)[0]) < 300) { return; }
+            AppState.evalStats.compressionHistory.push(currentTime);
+
+            const data = AppState.latestData;
+            AppState.evalStats.totalCompressions++;
+            if (data.depth >= RANGES.depth.min && data.depth <= RANGES.depth.max) AppState.evalStats.goodDepth++;
+            if (data.rate >= RANGES.rate.min && data.rate <= RANGES.rate.max) AppState.evalStats.goodRate++;
+            if (data.recoil >= RANGES.recoil.min) AppState.evalStats.goodRecoil++;
+            if (data.pos === 1) AppState.evalStats.goodPosition++;
+        }
+
+        function endEvaluation(cancelled) {
+            clearInterval(AppState.evaluationTimer);
+            AppState.isEvaluationRunning = false;
+            [...DOM.navButtons, ...DOM.timeSelectionButtons, DOM.startEvalButton, DOM.connectButton].forEach(b => b.disabled = false);
+            DOM.evalControls.style.display = 'block';
+            DOM.timerDisplay.style.display = 'none';
+            if (cancelled) return;
+
+            const { totalCompressions, goodDepth, goodRate, goodRecoil, goodPosition } = AppState.evalStats;
+            let score = 0, summary = '<p>No se detectaron compresiones.</p>';
+            if (totalCompressions > 0) {
+                const depthPct = goodDepth / totalCompressions, ratePct = goodRate / totalCompressions, recoilPct = goodRecoil / totalCompressions, posPct = goodPosition / totalCompressions;
+                score = Math.round((depthPct * 40) + (ratePct * 35) + (recoilPct * 15) + (posPct * 10));
+                summary = `<p>Compresiones Totales: <strong>${totalCompressions}</strong></p>
+                           <p>Profundidad Correcta: <strong>${Math.round(depthPct * 100)}%</strong></p>
+                           <p>Ritmo Correcto: <strong>${Math.round(ratePct * 100)}%</strong></p>
+                           <p>Descompresión Completa: <strong>${Math.round(recoilPct * 100)}%</strong></p>`;
+            }
+            DOM.finalScoreText.textContent = score;
+            DOM.resultsSummary.innerHTML = summary;
+            DOM.resultsModal.style.display = 'flex';
+        }
+
+        // --- LÓGICA PARA GRÁFICOS Y AJUSTES ---
+        let realtimeChart;
+        function initializeChart() {
+            const ctx = DOM.chartCanvas.getContext('2d');
+            realtimeChart = new Chart(ctx, {
+                type: 'line', data: { labels: Array(50).fill(''), datasets: [{ label: 'Aceleración Vertical', data: Array(50).fill(0), borderColor: 'rgb(3, 169, 244)', borderWidth: 2, pointRadius: 0, tension: 0.4 }] },
+                options: { animation: false, scales: { y: { min: -20000, max: 20000, ticks: { color: '#888' } }, x: { ticks: { display: false } } }, plugins: { legend: { display: false } }, maintainAspectRatio: false }
+            });
+        }
+        function updateChart(value) {
+            if (!realtimeChart) return;
+            realtimeChart.data.datasets[0].data.push(value);
+            realtimeChart.data.datasets[0].data.shift();
+            realtimeChart.update('none');
+        }
+        function setupSettings() {
+            const sliders = [
+                { el: DOM.depthMinSlider, valEl: DOM.depthMinValue, obj: RANGES.depth, key: 'min' }, { el: DOM.depthMaxSlider, valEl: DOM.depthMaxValue, obj: RANGES.depth, key: 'max' },
+                { el: DOM.rateMinSlider,  valEl: DOM.rateMinValue,  obj: RANGES.rate,  key: 'min' }, { el: DOM.rateMaxSlider,  valEl: DOM.rateMaxValue,  obj: RANGES.rate,  key: 'max' },
+                { el: DOM.recoilMinSlider,valEl: DOM.recoilMinValue,obj: RANGES.recoil,key: 'min' },
+            ];
+            sliders.forEach(({ el, valEl, obj, key }) => {
+                el.addEventListener('input', () => { 
+                    const value = parseFloat(el.value); 
+                    obj[key] = value; 
+                    valEl.textContent = value; 
+                    saveSettings();
+                    if (el.id.includes('depth')) updateIdealZoneVisual();
+                });
+            });
+            loadSettings();
+        }
+        function saveSettings() { localStorage.setItem('rcpAppSettings', JSON.stringify(RANGES)); }
+        function loadSettings() {
+            const saved = localStorage.getItem('rcpAppSettings');
+            if (saved) { RANGES = JSON.parse(saved); }
+            DOM.depthMinSlider.value = RANGES.depth.min; DOM.depthMinValue.textContent = RANGES.depth.min;
+            DOM.depthMaxSlider.value = RANGES.depth.max; DOM.depthMaxValue.textContent = RANGES.depth.max;
+            DOM.rateMinSlider.value = RANGES.rate.min; DOM.rateMinValue.textContent = RANGES.rate.min;
+            DOM.rateMaxSlider.value = RANGES.rate.max; DOM.rateMaxValue.textContent = RANGES.rate.max;
+            DOM.recoilMinSlider.value = RANGES.recoil.min; DOM.recoilMinValue.textContent = RANGES.recoil.min;
+            updateIdealZoneVisual();
+        }
+        
+        function updateIdealZoneVisual() {
+            const scale = RANGES.depth.scale, min = RANGES.depth.min, max = RANGES.depth.max;
+            if (scale > 0 && max > min) {
+                const bottomPercent = (min / scale) * 100;
+                const heightPercent = ((max - min) / scale) * 100;
+                DOM.depthIdealBar.style.bottom = `${bottomPercent}%`;
+                DOM.depthIdealBar.style.height = `${heightPercent}%`;
+            }
+        }
+
+        // --- INICIALIZACIÓN ---
         document.addEventListener('DOMContentLoaded', () => {
-            // ... (código de inicialización existente) ...
-            
-            DOM.clearCalibrationButton.addEventListener('click', resetCalibration);
             DOM.connectButton.addEventListener('click', connectToDevice);
             DOM.startEvalButton.addEventListener('click', startEvaluation);
             DOM.closeModalButton.addEventListener('click', () => { DOM.resultsModal.style.display = 'none'; });
-
-            // Cargar funciones que no necesitan cambios (copiadas por completitud)
-            initializeChart(); 
+            DOM.clearCalibrationButton.addEventListener('click', resetCalibration);
+            
+            initializeChart();
             setupSettings();
             requestAnimationFrame(animationLoop);
         });
-
-        // (Aquí irían el resto de las funciones que no cambiaron para que el script esté completo)
     </script>
 </body>
 </html>
